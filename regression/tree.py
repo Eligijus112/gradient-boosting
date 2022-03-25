@@ -4,6 +4,9 @@ import pandas as pd
 # OS traversal 
 import os 
 
+# Infinity constant 
+from math import inf 
+
 
 class Tree():
     """
@@ -14,7 +17,8 @@ class Tree():
         d: pd.DataFrame,
         y_var: str,
         x_vars: list,
-        max_depth: int = 4
+        max_depth: int = 4,
+        min_sample_leaf: int = 2
     ):
         """
         Class to create the regression tree object. 
@@ -29,6 +33,9 @@ class Tree():
             The features to use in the tree
         max_depth: int
             The maximum depth of the tree
+        min_sample_leaf: int 
+            The minimum number of observations in each of the subtrees after 
+            spliting
         """
         # Saving the names of y variable and X features
         self.y_var = y_var 
@@ -48,6 +55,9 @@ class Tree():
 
         # Saving the maximum depth of the tree
         self.max_depth = max_depth
+
+        # Saving the minimum samples in the dataframe after spliting 
+        self.min_sample_leaf = min_sample_leaf
 
         # Calculating the mse of the node 
         self.get_y_mse()
@@ -69,6 +79,9 @@ class Tree():
         # Infering the lenght of list 
         _n = len(x)
 
+        if _n == 0:
+            return inf
+
         # Iterating through the y values
         for _x in x:
             _sum += _x
@@ -89,6 +102,9 @@ class Tree():
         """
         # Infering the lenght of list 
         _n = len(x)
+
+        if _n == 0:
+            return inf
 
         # Calculating the mean 
         _mean = self.get_mean(x)
@@ -156,14 +172,15 @@ class Tree():
                 _y_left = self.d.loc[self.d[_cat_feature]==_level, self.y_var].values
                 _y_right = self.d.loc[self.d[_cat_feature]!=_level, self.y_var].values
 
-                # Calculating the weighted mse 
-                _mse_w = self.get_mse_weighted(_y_left, _y_right)
+                if len(_y_left) >= self.min_sample_leaf and len(_y_right) >= self.min_sample_leaf:
+                    # Calculating the weighted mse 
+                    _mse_w = self.get_mse_weighted(_y_left, _y_right)
 
-                # Checking the clause 
-                if _mse_w < _best_mse:
-                    _best_mse = _mse_w 
-                    _best_feature = _cat_feature
-                    _best_feature_value = str(_level) # Specificaly adding the type for later spliting
+                    # Checking the clause 
+                    if _mse_w < _best_mse:
+                        _best_mse = _mse_w 
+                        _best_feature = _cat_feature
+                        _best_feature_value = str(_level) # Specificaly adding the type for later spliting
 
         # Going through the numerical features
         for _num_feature in _num_features:
@@ -188,18 +205,106 @@ class Tree():
                 _y_left = self.d.loc[self.d[_num_feature]<=_mean, self.y_var].values
                 _y_right = self.d.loc[self.d[_num_feature]>_mean, self.y_var].values
 
-                # Getting the weighted mse 
-                _mse_w = self.get_mse_weighted(_y_left, _y_right)
+                if len(_y_left) >= self.min_sample_leaf and len(_y_right) >= self.min_sample_leaf:
+                    # Getting the weighted mse 
+                    _mse_w = self.get_mse_weighted(_y_left, _y_right)
 
-                # Checking the clause 
-                if _mse_w < _best_mse:
-                    _best_mse = _mse_w 
-                    _best_feature = _num_feature
-                    _best_feature_value = _mean
+                    # Checking the clause 
+                    if _mse_w < _best_mse:
+                        _best_mse = _mse_w 
+                        _best_feature = _num_feature
+                        _best_feature_value = _mean
 
         # Saving the best splits to object memory 
         self.best_feature = _best_feature
         self.best_feature_value = _best_feature_value
+
+    def fit(self):
+        """
+        The recursive method to fit a regression tree on the data provided
+        """
+        if self.depth < self.max_depth:
+            # Spliting the data depending on the found best splits 
+            _best_feature = self.best_feature
+            _best_feature_value = self.best_feature_value
+
+            # Spliting the data for the creation of additional sub trees
+            _d_left = pd.DataFrame()
+            _d_right = pd.DataFrame()
+            if isinstance(_best_feature_value, str):
+                _d_left = self.d[self.d[_best_feature]==_best_feature_value].copy()
+                _d_right = self.d[self.d[_best_feature]!=_best_feature_value].copy()
+            else:
+                _d_left = self.d[self.d[_best_feature]<=_best_feature_value].copy()
+                _d_right = self.d[self.d[_best_feature]>_best_feature_value].copy()
+
+            # Creating the tree instances 
+            _left_tree = Tree(
+                d = _d_left,
+                y_var = self.y_var,
+                x_vars = self.features,
+                min_sample_leaf = self.min_sample_leaf,
+                max_depth = self.max_depth
+                )
+            
+            _right_tree = Tree(
+                d = _d_right,
+                y_var = self.y_var,
+                x_vars = self.features,
+                min_sample_leaf = self.min_sample_leaf,
+                max_depth = self.max_depth
+                )
+
+            # Setting the depths 
+            _left_tree.depth = self.depth + 1
+            _right_tree.depth = self.depth + 1
+
+            # Defining the rules for the left and right subtrees
+            _left_symbol = '<='
+            _right_symbol = '>'
+            if isinstance(_best_feature_value, str):
+                _left_symbol = '=='
+                _right_symbol = '!='
+
+            _rule_left = f"{_best_feature} {_left_symbol} {_best_feature_value}"
+            _rule_right = f"{_best_feature} {_right_symbol} {_best_feature_value}"
+
+            _left_tree.rule = _rule_left
+            _right_tree.rule = _rule_right
+
+            # Saving the pointers in memory 
+            self.left = _left_tree
+            self.right = _right_tree
+
+            # Continuing the recursive process
+            self.left.fit()
+            self.right.fit()
+
+    def print_info(self, width=4):
+        """
+        Method to print the infromation about the tree
+        """
+        # Defining the number of spaces 
+        const = int(self.depth * width ** 1.5)
+        spaces = "-" * const
+        
+        if self.depth == 0:
+            print(f"Root (level {self.depth})")
+        else:
+            print(f"|{spaces} Split rule: {self.rule} (level {self.depth})")
+        print(f"{' ' * const}   | MSE of the node: {round(self.mse, 2)}")
+        print(f"{' ' * const}   | Count of observations in node: {self.n}")
+        print(f"{' ' * const}   | Prediction of node: {round(self.y_mean, 3)}")   
+
+    def print_tree(self):
+        """
+        Prints the whole tree from the current node to the bottom
+        """
+        self.print_info() 
+        
+        if self.depth < self.max_depth: 
+            self.left.print_tree()
+            self.right.print_tree()
 
 if __name__ == '__main__':
     # Infering the file location 
@@ -222,10 +327,14 @@ if __name__ == '__main__':
 
     # Initiating the ungrown tree 
     tree = Tree(
-        d,
-        _y_var,
-        _x_vars,
+        d = d,
+        y_var = _y_var,
+        x_vars = _x_vars,
+        max_depth = 3
     )
 
-    # Root node's best split 
-    print(f"Root feature to split:\n{tree.best_feature}\nValue:\n{tree.best_feature_value}")
+    # Fitting the tree 
+    tree.fit()
+
+    # Printing out the tree 
+    tree.print_tree()
