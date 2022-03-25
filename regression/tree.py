@@ -306,6 +306,46 @@ class Tree():
             self.left.print_tree()
             self.right.print_tree()
 
+    def predict(self, x: dict) -> float:
+        """
+        Returns the predict Y value based on the X values
+
+        Arguments
+        ---------
+        x: dict 
+            Dictionary of the structure: 
+            {
+                "feature_name": value,
+                ...
+            }
+        
+        Returns
+        -------
+        The mean Y based on the x and fitted 
+        """
+        # Infering the node 
+        _node = self
+        while _node.depth < self.max_depth:
+            
+            # Extracting the best split feature and values 
+            _best_feature = _node.best_feature
+            _best_feature_value = _node.best_feature_value
+
+            # Checking if the feature is categorical or numerical
+            if isinstance(_best_feature_value, str):
+                if x[_best_feature] == _best_feature_value:
+                    _node = _node.left
+                else:
+                    _node = _node.right
+            else:
+                if x[_best_feature] <= _best_feature_value:
+                    _node = _node.left
+                else:
+                    _node = _node.right
+        
+        # Returning the prediction
+        return _node.y_mean
+
 if __name__ == '__main__':
     # Infering the file location 
     _current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -325,9 +365,13 @@ if __name__ == '__main__':
     # Defining the features
     _x_vars = ['origin', 'weight', 'cylinders']
 
+    # Spliting the dataset into Train and Test 
+    train = d.sample(frac=0.8, random_state=0)
+    test = d.drop(train.index)
+
     # Initiating the ungrown tree 
     tree = Tree(
-        d = d,
+        d = train,
         y_var = _y_var,
         x_vars = _x_vars,
         max_depth = 3
@@ -338,3 +382,17 @@ if __name__ == '__main__':
 
     # Printing out the tree 
     tree.print_tree()
+
+    # Getting the predictions 
+    _inputs = test[_x_vars].to_dict('records')
+    _yhat = [tree.predict(x) for x in _inputs]
+
+    # Extracting the true values
+    _y_test = test[_y_var].to_list()
+
+    # Calculating the mse 
+    _mse = 0 
+    for i, y_true in enumerate(_y_test):
+        _mse += (y_true - _yhat[i])**2
+    _mse /= len(_y_test)
+    print(f"MSE on the test set: {_mse}")
