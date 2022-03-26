@@ -42,7 +42,7 @@ class Tree():
         self.features = x_vars
 
         # Saving the node data to memory 
-        self.d = d[[y_var] + x_vars] 
+        self.d = d[[y_var] + x_vars].copy()
 
         # Saving the data to the node 
         self.Y = d[y_var].values.tolist()
@@ -223,7 +223,7 @@ class Tree():
         """
         The recursive method to fit a regression tree on the data provided
         """
-        if self.depth < self.max_depth:
+        if self.depth < self.max_depth and self.best_feature is not None:
             # Spliting the data depending on the found best splits 
             _best_feature = self.best_feature
             _best_feature_value = self.best_feature_value
@@ -240,7 +240,7 @@ class Tree():
 
             # Creating the tree instances 
             _left_tree = Tree(
-                d = _d_left,
+                d = _d_left.copy(),
                 y_var = self.y_var,
                 x_vars = self.features,
                 min_sample_leaf = self.min_sample_leaf,
@@ -248,7 +248,7 @@ class Tree():
                 )
             
             _right_tree = Tree(
-                d = _d_right,
+                d = _d_right.copy(),
                 y_var = self.y_var,
                 x_vars = self.features,
                 min_sample_leaf = self.min_sample_leaf,
@@ -325,7 +325,7 @@ class Tree():
         """
         # Infering the node 
         _node = self
-        while _node.depth < self.max_depth:
+        while _node.depth < self.max_depth and _node.best_feature is not None:
             
             # Extracting the best split feature and values 
             _best_feature = _node.best_feature
