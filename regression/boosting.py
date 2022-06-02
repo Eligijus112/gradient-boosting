@@ -179,6 +179,9 @@ if __name__ == '__main__':
         learning_rate = 0.3,
     )
 
+    _reg_gb.fit(m=3)
+    _reg_gb.predict({'weight': 1200})
+
     # Number of iterations 
     _n = 30
 

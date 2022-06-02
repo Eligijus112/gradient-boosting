@@ -62,6 +62,9 @@ class Tree():
         # Calculating the mse of the node 
         self.get_y_mse()
 
+        # Saving the squared error sums of the node
+        self.get_squared_error()
+
         # Infering the best split 
         self.get_best_split()
 
@@ -88,6 +91,33 @@ class Tree():
 
         # Returning the mean 
         return _sum / _n 
+
+    def get_squared_error(self):
+        """
+        Method to calculate the squared error of the node
+        """
+        # Infering the lenght of list 
+        _n = len(self.Y)
+
+        if _n == 0:
+            return inf
+
+        # Calculating the mean 
+        _mean = self.get_mean(self.Y)
+
+        # Getting the residuals 
+        residuals = [_y - _mean for _y in self.Y]
+
+        # Squaring the residuals
+        residuals = [r ** 2 for r in residuals]
+
+        # Summing the residuals 
+        _r_sum = 0 
+        for r in residuals:
+            _r_sum += r
+
+        # Returning the mean squared error 
+        self.squared_error = _r_sum 
 
     def get_y_mean(self) -> None:
         """
@@ -219,6 +249,12 @@ class Tree():
         self.best_feature = _best_feature
         self.best_feature_value = _best_feature_value
 
+        # Saving the mse reduction after the split 
+        self.mse_reduction = self.mse - _best_mse
+
+        # Calculating the nodes squared error sum 
+        self.squared_error = self.squared_error
+
     def fit(self):
         """
         The recursive method to fit a regression tree on the data provided
@@ -346,6 +382,75 @@ class Tree():
         # Returning the prediction
         return _node.y_mean
 
+    def get_importances(self, dict_list = []) -> dict:
+        """
+        Returns the importance of the features in the tree
+
+        Arguments
+        ---------
+        importance_type: str 
+            The type of importance to be returned. 
+            Can be "mse" or "gini"
+
+        Returns
+        -------
+        A list of dictionaries: 
+        {
+            "best_feature": str,
+            "n_obs_in_node": <int>,
+            "mse_reduction": float,
+            'mse': float,
+        }
+        """ 
+        # Creating the dictionary with the current nodes statistics 
+        ft_importance = {
+            'best_feature': self.best_feature,
+            'n_obs_in_node': self.n,
+            'mse_reduction': self.mse_reduction,
+            'mse': self.mse,
+            'squared_error': self.squared_error,
+        }
+
+        # Recursively calling the function on the left and right subtrees
+        if self.depth + 1 < self.max_depth:
+            self.left.get_importances(dict_list)
+            self.right.get_importances(dict_list)
+
+        dict_list.append(ft_importance)
+
+        return dict_list
+
+    def feature_importance(self):
+        """
+        Calculated the weighted feature importance 
+        """
+        # Getting the importance of the features in the tree
+        _importance_list = self.get_importances()
+
+        # Creating a dataframe out of the list 
+        _df = pd.DataFrame(_importance_list)
+
+        # Calculating the total impact by multiplying the number of obs by the mse reduction 
+        _df['total_impact'] = _df['n_obs_in_node'] * _df['mse_reduction']
+
+        # Grouping by the best feature and summing the total impact
+        _df = _df.groupby('best_feature').sum()
+
+        # Calculating the weighted total_impact 
+        _df['weighted_total_impact'] = _df['total_impact'] / _df['total_impact'].sum()
+
+        # Creating the feature importance dict 
+        _feature_importance = _df.to_dict()['weighted_total_impact']
+
+        # Checking if all the features are present from the x_var list 
+        _missing_features = list(set(self.features) - set(_feature_importance.keys()))
+        if len(_missing_features) > 0:
+            for _feature in _missing_features:
+                _feature_importance[_feature] = 0
+
+        # Returning a dictionary with the feature importance where the keys are the features and the values are the weighted total impact
+        return _feature_importance
+
 if __name__ == '__main__':
     # Infering the file location 
     _current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -374,7 +479,7 @@ if __name__ == '__main__':
         d = train,
         y_var = _y_var,
         x_vars = _x_vars,
-        max_depth = 3
+        max_depth = 2
     )
 
     # Fitting the tree 
@@ -396,3 +501,7 @@ if __name__ == '__main__':
         _mse += (y_true - _yhat[i])**2
     _mse /= len(_y_test)
     print(f"MSE on the test set: {_mse}")
+
+    # Printing out the feature importances
+    _ft_importance = tree.feature_importance()
+    print(f"Feature importances: {_ft_importance}")
